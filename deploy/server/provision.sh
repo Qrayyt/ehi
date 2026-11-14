@@ -50,7 +50,8 @@ fi
 if [[ ! -f "$ENV_FILE" ]]; then
   umask 077
   cat > "$ENV_FILE" <<EOF
-PUBLIC_ORIGIN=$TUNNEL_URL
+PUBLIC_ORIGIN=http://141.98.235.153
+TELEGRAM_WEBHOOK_ORIGIN=$TUNNEL_URL
 SESSION_SECRET=$(openssl rand -hex 48)
 TELEGRAM_WEBHOOK_SECRET=$(openssl rand -hex 32)
 BOOTSTRAP_SECRET=$EHI_BOOTSTRAP_SECRET
@@ -58,8 +59,18 @@ TELEGRAM_TOKEN_FILE=/run/ehi-secrets/telegram-bot-token
 BOOTSTRAP_MARKER_FILE=/run/ehi-secrets/.bootstrapped
 EOF
 else
-  sed -i "s#^PUBLIC_ORIGIN=.*#PUBLIC_ORIGIN=$TUNNEL_URL#" "$ENV_FILE"
+  sed -i 's#^PUBLIC_ORIGIN=.*#PUBLIC_ORIGIN=http://141.98.235.153#' "$ENV_FILE"
+  if grep -q '^TELEGRAM_WEBHOOK_ORIGIN=' "$ENV_FILE"; then
+    sed -i "s#^TELEGRAM_WEBHOOK_ORIGIN=.*#TELEGRAM_WEBHOOK_ORIGIN=$TUNNEL_URL#" "$ENV_FILE"
+  else
+    printf 'TELEGRAM_WEBHOOK_ORIGIN=%s\n' "$TUNNEL_URL" >> "$ENV_FILE"
+  fi
 fi
+
+install -m 644 "$REPO_DIR/deploy/server/ehi-ip.nginx" /etc/nginx/sites-available/ehi-ip
+ln -sfn /etc/nginx/sites-available/ehi-ip /etc/nginx/sites-enabled/ehi-ip
+nginx -t
+systemctl reload nginx
 
 install -m 644 "$REPO_DIR/deploy/server/ehi-release.service" /etc/systemd/system/ehi-release.service
 install -m 644 "$REPO_DIR/deploy/server/ehi-release.timer" /etc/systemd/system/ehi-release.timer

@@ -80,6 +80,7 @@ export async function handleTelegramUpdate(update) {
 
 export async function configureTelegramBot() {
   const profile = await getBotProfile({ refresh: true });
+  const webhookOrigin = process.env.TELEGRAM_WEBHOOK_ORIGIN || process.env.PUBLIC_ORIGIN;
   await callTelegram('setMyCommands', { commands: [
     { command: 'start', description: 'Главное меню' },
     { command: 'site', description: 'Открыть кинотеатр' },
@@ -87,7 +88,7 @@ export async function configureTelegramBot() {
     { command: 'help', description: 'Список команд' },
   ] });
   await callTelegram('setWebhook', {
-    url: `${process.env.PUBLIC_ORIGIN}/api/telegram/webhook`,
+    url: `${webhookOrigin}/api/telegram/webhook`,
     secret_token: process.env.TELEGRAM_WEBHOOK_SECRET,
     allowed_updates: ['message'],
   });

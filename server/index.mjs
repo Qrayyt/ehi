@@ -11,6 +11,7 @@ const publicOrigin = process.env.PUBLIC_ORIGIN || 'http://localhost:3015';
 const staticRoot = resolve(process.env.STATIC_ROOT || 'dist');
 const indexFile = join(staticRoot, 'index.html');
 const sessionCookie = 'ehi_session';
+const secureCookie = publicOrigin.startsWith('https://') ? '; Secure' : '';
 
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon',
@@ -89,7 +90,7 @@ async function routeApi(request, response, url) {
     const result = consumeLoginChallenge(challengeId);
     if (result.status !== 'approved') return json(response, result.status === 'expired' ? 410 : 200, { status: result.status });
     const token = createSession(result.user);
-    return json(response, 200, { status: 'approved', user: result.user }, { 'Set-Cookie': `${sessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000` });
+    return json(response, 200, { status: 'approved', user: result.user }, { 'Set-Cookie': `${sessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly${secureCookie}; SameSite=Lax; Max-Age=2592000` });
   }
 
   if (url.pathname === '/api/admin/bootstrap' && request.method === 'POST') {
@@ -109,7 +110,7 @@ async function routeApi(request, response, url) {
       const user = verifyTelegramLogin(await readJson(request));
       if (!user) return json(response, 401, { error: 'invalid_telegram_signature' });
       const token = createSession(user);
-      return json(response, 200, { user }, { 'Set-Cookie': `${sessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000` });
+      return json(response, 200, { user }, { 'Set-Cookie': `${sessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly${secureCookie}; SameSite=Lax; Max-Age=2592000` });
     } catch {
       return json(response, 400, { error: 'invalid_request' });
     }
@@ -122,7 +123,7 @@ async function routeApi(request, response, url) {
     const user = verifyTelegramLogin(payload);
     if (!user) return redirect(response, '/auth?error=telegram');
     const token = createSession(user);
-    return redirect(response, safeReturnTo, { 'Set-Cookie': `${sessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000` });
+    return redirect(response, safeReturnTo, { 'Set-Cookie': `${sessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly${secureCookie}; SameSite=Lax; Max-Age=2592000` });
   }
 
   if (url.pathname === '/api/auth/me' && request.method === 'GET') {
@@ -131,7 +132,7 @@ async function routeApi(request, response, url) {
   }
 
   if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
-    return json(response, 200, { ok: true }, { 'Set-Cookie': `${sessionCookie}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0` });
+    return json(response, 200, { ok: true }, { 'Set-Cookie': `${sessionCookie}=; Path=/; HttpOnly${secureCookie}; SameSite=Lax; Max-Age=0` });
   }
 
   if (url.pathname === '/api/telegram/webhook' && request.method === 'POST') {
