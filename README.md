@@ -9,6 +9,10 @@ npm install
 npm run dev
 ```
 
+## GitHub Pages
+
+Публикация выполняется автоматически workflow-файлом `.github/workflows/deploy-pages.yml`. Он собирает Vite-приложение с базовым путём `/ehi/`, добавляет SPA-fallback и публикует папку `dist`.
+
 ## Что внутри
 
 - афиша из шести фильмов и сериалов с настоящими постерами;

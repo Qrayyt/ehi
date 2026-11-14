@@ -172,7 +172,8 @@ function HomePage() {
 }
 
 function Poster({ film, priority = false }) {
-  return <img className="poster" src={film.poster} alt={`Официальный постер «${film.title}»`} loading={priority ? 'eager' : 'lazy'} />;
+  const posterPath = `${import.meta.env.BASE_URL}${film.poster.replace(/^\/+/, '')}`;
+  return <img className="poster" src={posterPath} alt={`Официальный постер «${film.title}»`} loading={priority ? 'eager' : 'lazy'} />;
 }
 
 function FilmCard({ film, index }) {
