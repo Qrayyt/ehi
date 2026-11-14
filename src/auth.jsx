@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext(null);
 const logoPath = `${import.meta.env.BASE_URL}ehi-logo.svg`;
@@ -93,9 +93,11 @@ export function RequireAuth({ children }) {
 }
 
 export function AuthPage() {
-  const { ready, user } = useAuth();
+  const { ready, user, signIn } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [botUsername, setBotUsername] = useState('');
+  const [challengeId, setChallengeId] = useState('');
   const [error, setError] = useState(() => new URLSearchParams(location.search).has('error') ? 'Не получилось войти через Telegram. Повторите попытку.' : '');
   const returnTo = new URLSearchParams(location.search).get('return') || '/cinema';
 
@@ -103,11 +105,17 @@ export function AuthPage() {
     if (!ready || user) return undefined;
     let active = true;
 
-    fetch('/api/config')
-      .then(async (response) => {
-        if (!response.ok) throw new Error('config');
-        const result = await response.json();
-        if (active) setBotUsername(result.botUsername || '');
+    Promise.all([
+      fetch('/api/config'),
+      fetch('/api/auth/challenge', { method: 'POST', credentials: 'include' }),
+    ])
+      .then(async ([configResponse, challengeResponse]) => {
+        if (!configResponse.ok || !challengeResponse.ok) throw new Error('config');
+        const [config, challenge] = await Promise.all([configResponse.json(), challengeResponse.json()]);
+        if (active) {
+          setBotUsername(config.botUsername || '');
+          setChallengeId(challenge.id || '');
+        }
       })
       .catch(() => {
         if (active) setError('Вход сейчас недоступен. Попробуйте чуть позже.');
@@ -117,30 +125,28 @@ export function AuthPage() {
   }, [ready, user]);
 
   useEffect(() => {
-    if (!botUsername || user) return undefined;
-    const holder = document.getElementById('telegram-login-holder');
-    if (!holder) return undefined;
-
-    holder.replaceChildren();
+    if (!challengeId || user) return undefined;
     const safeReturnTo = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/cinema';
-    const callbackUrl = new URL('/api/auth/telegram/callback', window.location.origin);
-    callbackUrl.searchParams.set('return', safeReturnTo);
-    const script = document.createElement('script');
-    script.async = true;
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', botUsername);
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-radius', '4');
-    script.setAttribute('data-userpic', 'false');
-    script.setAttribute('data-request-access', 'write');
-    script.setAttribute('data-lang', 'ru');
-    script.setAttribute('data-auth-url', callbackUrl.toString());
-    holder.appendChild(script);
-
-    return () => {
-      holder.replaceChildren();
-    };
-  }, [botUsername, returnTo, user]);
+    let active = true;
+    const poll = window.setInterval(async () => {
+      try {
+        const response = await fetch(`/api/auth/challenge/${challengeId}`, { credentials: 'include' });
+        const result = await response.json();
+        if (!active) return;
+        if (response.ok && result.status === 'approved' && result.user) {
+          window.clearInterval(poll);
+          signIn(result.user);
+          navigate(safeReturnTo, { replace: true });
+        } else if (response.status === 410) {
+          window.clearInterval(poll);
+          setError('Ссылка для входа устарела. Обновите страницу.');
+        }
+      } catch {
+        // A brief network interruption should not cancel the login attempt.
+      }
+    }, 1600);
+    return () => { active = false; window.clearInterval(poll); };
+  }, [challengeId, navigate, returnTo, signIn, user]);
 
   if (ready && user) return <Navigate to={returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/cinema'} replace />;
 
@@ -156,11 +162,13 @@ export function AuthPage() {
           <h1>Войти</h1>
           <p>Билеты и бронирования будут доступны после входа через Telegram.</p>
         </div>
-        <div id="telegram-login-holder" className="telegram-login" aria-live="polite">
-          {!botUsername && !error && <span className="telegram-login__placeholder">Подключаем Telegram…</span>}
+        <div className="telegram-login" aria-live="polite">
+          {botUsername && challengeId
+            ? <a className="telegram-login__button" href={`https://t.me/${botUsername}?start=login_${challengeId}`} target="_blank" rel="noreferrer">Войти через Telegram</a>
+            : !error && <span className="telegram-login__placeholder">Подключаем Telegram…</span>}
         </div>
         {error && <p className="auth-error" role="alert">{error}</p>}
-        <small>Мы получим только имя, фотографию и Telegram ID.</small>
+        <small>Откройте бота и нажмите Start. Страница войдёт автоматически.</small>
       </section>
       <p className="auth-footnote">EHI! CINEMA · 2026</p>
     </main>

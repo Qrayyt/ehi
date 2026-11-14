@@ -1,4 +1,5 @@
 import { getTelegramToken } from './secrets.mjs';
+import { approveLoginChallenge } from './login-challenges.mjs';
 
 let cachedProfile = null;
 
@@ -26,12 +27,23 @@ function escapeHtml(value) {
 }
 
 const commandHandlers = new Map([
-  ['start', async ({ chatId, user }) => callTelegram('sendMessage', {
-    chat_id: chatId,
-    parse_mode: 'HTML',
-    text: `Привет, ${escapeHtml(user.first_name || 'гость')}! Это бот <b>EHI! CINEMA</b>. Здесь позже появятся уведомления о бронях и билетах.`,
-    reply_markup: { inline_keyboard: [[{ text: 'Открыть кинотеатр', url: process.env.PUBLIC_ORIGIN }]] },
-  })],
+  ['start', async ({ chatId, user, message }) => {
+    const parameter = String(message.text || '').trim().split(/\s+/, 2)[1] || '';
+    if (parameter.startsWith('login_')) {
+      const challengeId = parameter.slice(6);
+      const approved = /^[a-f0-9]{48}$/.test(challengeId) && approveLoginChallenge(challengeId, user);
+      return callTelegram('sendMessage', {
+        chat_id: chatId,
+        text: approved ? 'Вход подтверждён. Можно вернуться на страницу EHI! CINEMA.' : 'Ссылка для входа устарела. Откройте страницу входа ещё раз.',
+      });
+    }
+    return callTelegram('sendMessage', {
+      chat_id: chatId,
+      parse_mode: 'HTML',
+      text: `Привет, ${escapeHtml(user.first_name || 'гость')}! Это бот <b>EHI! CINEMA</b>. Здесь позже появятся уведомления о бронях и билетах.`,
+      reply_markup: { inline_keyboard: [[{ text: 'Открыть кинотеатр', url: process.env.PUBLIC_ORIGIN }]] },
+    });
+  }],
   ['help', async ({ chatId }) => callTelegram('sendMessage', {
     chat_id: chatId,
     parse_mode: 'HTML',

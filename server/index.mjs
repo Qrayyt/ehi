@@ -3,6 +3,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
 import { bootstrapTelegramToken, canBootstrap, createSession, readSession, verifyBootstrapSecret, verifyTelegramLogin } from './secrets.mjs';
 import { configureTelegramBot, getBotProfile, handleTelegramUpdate } from './telegram.mjs';
+import { consumeLoginChallenge, createLoginChallenge } from './login-challenges.mjs';
 
 const port = Number(process.env.PORT || 3015);
 const host = process.env.HOST || '127.0.0.1';
@@ -19,7 +20,7 @@ const mimeTypes = {
 
 function securityHeaders() {
   return {
-    'Content-Security-Policy': "default-src 'self'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; frame-src https://oauth.telegram.org https://telegram.org https://t.me; connect-src 'self'; base-uri 'self'; form-action 'self'",
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; base-uri 'self'; form-action 'self'",
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'SAMEORIGIN',
@@ -76,6 +77,19 @@ async function routeApi(request, response, url) {
     } catch {
       return json(response, 503, { error: 'telegram_not_configured' });
     }
+  }
+
+  if (url.pathname === '/api/auth/challenge' && request.method === 'POST') {
+    return json(response, 201, createLoginChallenge());
+  }
+
+  if (url.pathname.startsWith('/api/auth/challenge/') && request.method === 'GET') {
+    const challengeId = url.pathname.slice('/api/auth/challenge/'.length);
+    if (!/^[a-f0-9]{48}$/.test(challengeId)) return json(response, 400, { error: 'invalid_challenge' });
+    const result = consumeLoginChallenge(challengeId);
+    if (result.status !== 'approved') return json(response, result.status === 'expired' ? 410 : 200, { status: result.status });
+    const token = createSession(result.user);
+    return json(response, 200, { status: 'approved', user: result.user }, { 'Set-Cookie': `${sessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000` });
   }
 
   if (url.pathname === '/api/admin/bootstrap' && request.method === 'POST') {
