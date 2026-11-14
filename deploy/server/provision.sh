@@ -30,7 +30,7 @@ BOOTSTRAP_MARKER_FILE=/run/ehi-secrets/.bootstrapped
 EOF
 fi
 
-install -m 644 "$REPO_DIR/deploy/server/ehi-cinema.nginx" /etc/nginx/sites-available/ehi-cinema
+install -m 644 "$REPO_DIR/deploy/server/ehi-cinema-http.nginx" /etc/nginx/sites-available/ehi-cinema
 ln -sfn /etc/nginx/sites-available/ehi-cinema /etc/nginx/sites-enabled/ehi-cinema
 nginx -t
 systemctl reload nginx
@@ -40,8 +40,15 @@ if ! command -v certbot >/dev/null 2>&1; then
   DEBIAN_FRONTEND=noninteractive apt-get install -y certbot python3-certbot-nginx
 fi
 if [[ ! -d /etc/letsencrypt/live/ehi.qrayyt.ru ]]; then
-  certbot --nginx -d ehi.qrayyt.ru --non-interactive --agree-tos --register-unsafely-without-email --redirect
+  certbot --nginx -d ehi.qrayyt.ru --non-interactive --agree-tos --register-unsafely-without-email
 fi
+
+install -m 644 "$REPO_DIR/deploy/server/ehi-cinema.nginx" /etc/nginx/sites-available/ehi-cinema
+if ! grep -q 'ehi.qrayyt.ru' /etc/nginx/stream-conf.d/galenite-edge.conf; then
+  sed -i '/^[[:space:]]*hostnames;[[:space:]]*$/a\    ehi.qrayyt.ru                  127.0.0.1:9444;' /etc/nginx/stream-conf.d/galenite-edge.conf
+fi
+nginx -t
+systemctl reload nginx
 
 install -m 644 "$REPO_DIR/deploy/server/ehi-release.service" /etc/systemd/system/ehi-release.service
 install -m 644 "$REPO_DIR/deploy/server/ehi-release.timer" /etc/systemd/system/ehi-release.timer
