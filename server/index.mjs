@@ -32,6 +32,11 @@ function json(response, status, payload, extraHeaders = {}) {
   response.end(JSON.stringify(payload));
 }
 
+function redirect(response, location, extraHeaders = {}) {
+  response.writeHead(302, { ...securityHeaders(), 'Cache-Control': 'no-store', Location: location, ...extraHeaders });
+  response.end();
+}
+
 function parseCookies(header = '') {
   return Object.fromEntries(header.split(';').map((part) => part.trim().split('=').map(decodeURIComponent)).filter(([key]) => key));
 }
@@ -94,6 +99,16 @@ async function routeApi(request, response, url) {
     } catch {
       return json(response, 400, { error: 'invalid_request' });
     }
+  }
+
+  if (url.pathname === '/api/auth/telegram/callback' && request.method === 'GET') {
+    const returnTo = url.searchParams.get('return') || '/cinema';
+    const safeReturnTo = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/cinema';
+    const payload = Object.fromEntries([...url.searchParams.entries()].filter(([key]) => key !== 'return'));
+    const user = verifyTelegramLogin(payload);
+    if (!user) return redirect(response, '/auth?error=telegram');
+    const token = createSession(user);
+    return redirect(response, safeReturnTo, { 'Set-Cookie': `${sessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000` });
   }
 
   if (url.pathname === '/api/auth/me' && request.method === 'GET') {

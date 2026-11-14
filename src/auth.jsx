@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 
 const AuthContext = createContext(null);
 const logoPath = `${import.meta.env.BASE_URL}ehi-logo.svg`;
@@ -93,11 +93,10 @@ export function RequireAuth({ children }) {
 }
 
 export function AuthPage() {
-  const { ready, user, signIn } = useAuth();
-  const navigate = useNavigate();
+  const { ready, user } = useAuth();
   const location = useLocation();
   const [botUsername, setBotUsername] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => new URLSearchParams(location.search).has('error') ? 'Не получилось войти через Telegram. Повторите попытку.' : '');
   const returnTo = new URLSearchParams(location.search).get('return') || '/cinema';
 
   useEffect(() => {
@@ -122,25 +121,10 @@ export function AuthPage() {
     const holder = document.getElementById('telegram-login-holder');
     if (!holder) return undefined;
 
-    window.onEhiTelegramAuth = async (telegramUser) => {
-      setError('');
-      try {
-        const response = await fetch('/api/auth/telegram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(telegramUser),
-        });
-        const result = await response.json();
-        if (!response.ok || !result.user) throw new Error(result.error || 'auth');
-        signIn(result.user);
-        navigate(returnTo.startsWith('/') ? returnTo : '/cinema', { replace: true });
-      } catch {
-        setError('Не получилось войти через Telegram. Повторите попытку.');
-      }
-    };
-
     holder.replaceChildren();
+    const safeReturnTo = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/cinema';
+    const callbackUrl = new URL('/api/auth/telegram/callback', window.location.origin);
+    callbackUrl.searchParams.set('return', safeReturnTo);
     const script = document.createElement('script');
     script.async = true;
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
@@ -150,16 +134,15 @@ export function AuthPage() {
     script.setAttribute('data-userpic', 'false');
     script.setAttribute('data-request-access', 'write');
     script.setAttribute('data-lang', 'ru');
-    script.setAttribute('data-onauth', 'onEhiTelegramAuth(user)');
+    script.setAttribute('data-auth-url', callbackUrl.toString());
     holder.appendChild(script);
 
     return () => {
-      delete window.onEhiTelegramAuth;
       holder.replaceChildren();
     };
-  }, [botUsername, navigate, returnTo, signIn, user]);
+  }, [botUsername, returnTo, user]);
 
-  if (ready && user) return <Navigate to={returnTo.startsWith('/') ? returnTo : '/cinema'} replace />;
+  if (ready && user) return <Navigate to={returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/cinema'} replace />;
 
   return (
     <main className="auth-page">
