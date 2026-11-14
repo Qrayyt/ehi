@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { formatKisses } from './currency';
+import { AuthPage, RequireAuth, useAuth } from './auth';
 
 const films = [
   {
@@ -167,6 +168,7 @@ function Icon({ name }) {
 function CinemaLayout({ children }) {
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const { user, signOut } = useAuth();
   useEffect(() => setOpen(false), [location.pathname]);
   return (
     <div className="cinema-shell">
@@ -177,8 +179,9 @@ function CinemaLayout({ children }) {
           <NavLink to="/cinema" end>Афиша</NavLink>
           <NavLink to="/cinema/tickets">Мои билеты</NavLink>
           <NavLink to="/cinema/about">О кинотеатре</NavLink>
+          <button type="button" className="nav-signout" onClick={signOut}>Выйти</button>
         </nav>
-        <Link to="/cinema/tickets" className="header-ticket"><Icon name="ticket" /> Мои билеты</Link>
+        <div className="header-account"><span>{user?.first_name || 'Гость'}</span><button type="button" onClick={signOut}>Выйти</button></div>
       </header>
       <main>{children}</main>
       <footer className="footer">
@@ -411,5 +414,5 @@ function ScrollToTop() {
 }
 
 export default function App() {
-  return <><ScrollToTop /><Routes><Route path="/" element={<HomePage />} /><Route path="/cinema" element={<CinemaHome />} /><Route path="/cinema/film/:filmId" element={<FilmPage />} /><Route path="/cinema/seats" element={<SeatPage />} /><Route path="/cinema/checkout" element={<CheckoutPage />} /><Route path="/cinema/ticket" element={<TicketPage />} /><Route path="/cinema/tickets" element={<TicketsPage />} /><Route path="/cinema/about" element={<AboutPage />} /><Route path="*" element={<Navigate to="/cinema" replace />} /></Routes></>;
+  return <><ScrollToTop /><Routes><Route path="/" element={<HomePage />} /><Route path="/auth" element={<AuthPage />} /><Route path="/cinema" element={<RequireAuth><CinemaHome /></RequireAuth>} /><Route path="/cinema/film/:filmId" element={<RequireAuth><FilmPage /></RequireAuth>} /><Route path="/cinema/seats" element={<RequireAuth><SeatPage /></RequireAuth>} /><Route path="/cinema/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} /><Route path="/cinema/ticket" element={<RequireAuth><TicketPage /></RequireAuth>} /><Route path="/cinema/tickets" element={<RequireAuth><TicketsPage /></RequireAuth>} /><Route path="/cinema/about" element={<RequireAuth><AboutPage /></RequireAuth>} /><Route path="*" element={<Navigate to="/cinema" replace />} /></Routes></>;
 }

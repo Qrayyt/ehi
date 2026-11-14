@@ -1,0 +1,18 @@
+name: ehi-cinema
+services:
+  web:
+    build: .
+    container_name: ehi-cinema
+    restart: unless-stopped
+    env_file:
+      - /opt/ehi-cinema/shared/ehi.env
+    volumes:
+      - /opt/ehi-cinema/shared:/run/ehi-secrets
+    ports:
+      - "127.0.0.1:3015:3015"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3015/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
