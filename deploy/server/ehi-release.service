@@ -1,0 +1,9 @@
+[Unit]
+Description=Deploy the latest EHI! CINEMA GitHub release
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ehi-cinema/bin/watch-release.sh
+Nice=10
