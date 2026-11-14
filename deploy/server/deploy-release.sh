@@ -7,6 +7,13 @@ RELEASES_DIR="$BASE_DIR/releases"
 RELEASE_DIR="$RELEASES_DIR/$TAG"
 REPOSITORY="https://github.com/Qrayyt/ehi.git"
 
+mkdir -p "$BASE_DIR"
+exec 9>"$BASE_DIR/deploy.lock"
+if ! flock -n 9; then
+  echo "Another EHI! CINEMA deployment is already running"
+  exit 0
+fi
+
 if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9._-]+)?$ ]]; then
   echo "Invalid release tag" >&2
   exit 2
