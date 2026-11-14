@@ -95,17 +95,41 @@ const films = [
   },
 ];
 
-const occupiedSeats = new Set(['2-3', '2-4', '3-6', '4-2', '4-8', '5-5', '5-6']);
+const sofaPlaces = [
+  { id: 'left', label: 'Слева на диване', shortLabel: 'Слева' },
+  { id: 'right', label: 'Справа на диване', shortLabel: 'Справа' },
+];
+
 const defaultBooking = {
   filmId: 'mr-and-mrs-smith',
-  guest: 'Ева Трубникова',
-  requestedDate: '2026-11-21',
+  guest: 'Трубникова Ева',
+  requestedDate: '2026-11-14',
   requestedTime: '19:30',
-  hall: 3,
-  seats: [{ row: 1, seat: 1 }],
-  ticketNumber: 'EH-261121',
+  room: 'Гостиная',
+  seats: [sofaPlaces[0]],
+  ticketNumber: 'EH-0008427',
   status: 'request',
 };
+
+function normalizeSeats(seats) {
+  if (!Array.isArray(seats) || !seats.length) return [sofaPlaces[0]];
+  return seats.map((seat, index) => {
+    if (seat?.id && seat?.label) return seat;
+    return sofaPlaces[index % sofaPlaces.length];
+  }).filter((seat, index, list) => list.findIndex((item) => item.id === seat.id) === index);
+}
+
+function normalizeBooking(booking = {}) {
+  return { ...defaultBooking, ...booking, seats: normalizeSeats(booking.seats || defaultBooking.seats) };
+}
+
+function makeTicketNumber() {
+  return `EH-${String(Date.now()).slice(-7).padStart(7, '0')}`;
+}
+
+function placeNames(seats, short = false) {
+  return normalizeSeats(seats).map((seat) => short ? seat.shortLabel : seat.label).join(' · ');
+}
 
 function formatDate(value) {
   if (!value) return 'По договорённости';
@@ -195,9 +219,9 @@ function CinemaHome() {
   return (
     <CinemaLayout>
       <section className="cinema-hero">
-        <div className="cinema-hero__copy"><span className="eyebrow">EHI! CINEMA · частные показы</span><h1>Истории,<br />которые хочется<br /><i>смотреть вдвоём.</i></h1><p>Маленький зал, большой экран и оплата поцелуями при встрече. Выберите историю — остальное согласуем лично.</p><a className="button button--primary" href="#catalog">Смотреть афишу <Icon name="arrow" /></a></div>
+        <div className="cinema-hero__copy"><span className="eyebrow">EHI! CINEMA · частные показы</span><h1>Истории,<br />которые хочется<br /><i>смотреть вдвоём.</i></h1><p>Уютная гостиная, плазма, диван на двоих и оплата поцелуями при встрече. Выберите историю — остальное согласуем лично.</p><a className="button button--primary" href="#catalog">Смотреть афишу <Icon name="arrow" /></a></div>
         <Link className="featured-poster" to={`/cinema/film/${featured.id}`}><Poster film={featured} priority /><div><span>Выбор вечера</span><strong>{featured.title}</strong><small>{formatKisses(featured.price, true)} за место</small></div></Link>
-        <div className="hero-note"><span>01 зал</span><span>40 мест</span><span>Только свои</span></div>
+        <div className="hero-note"><span>01 гостиная</span><span>02 места</span><span>Только свои</span></div>
       </section>
 
       <section className="catalog section" id="catalog">
@@ -245,7 +269,7 @@ function FilmPage() {
 
       <section className="booking-panel section">
         <div><span className="eyebrow">Персональный показ</span><h2>{canBook ? 'Когда вам удобно?' : 'Сериалы — следующим шагом'}</h2><p>{canBook ? 'Это запрос желаемого времени, а не опубликованный сеанс. После бронирования мы отдельно подтвердим дату.' : 'Каталог уже готов, но выбор сезона и серии пока не настроен. Никакого фиктивного расписания не показываем.'}</p></div>
-        {canBook ? <form className="request-form" onSubmit={requestScreening}><label>Желаемая дата<input type="date" value={date} min="2026-11-15" onChange={(event) => setDate(event.target.value)} required /></label><label>Желаемое время<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label><button className="button button--primary" type="submit">Выбрать места <Icon name="arrow" /></button><small>Подтвердим показ после согласования.</small></form> : <Link className="button button--outline" to="/cinema">Вернуться к афише</Link>}
+        {canBook ? <form className="request-form" onSubmit={requestScreening}><label>Желаемая дата<input type="date" value={date} min="2026-11-14" onChange={(event) => setDate(event.target.value)} required /></label><label>Желаемое время<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label><button className="button button--primary" type="submit">Выбрать место на диване <Icon name="arrow" /></button><small>Подтвердим показ после согласования.</small></form> : <Link className="button button--outline" to="/cinema">Вернуться к афише</Link>}
       </section>
     </CinemaLayout>
   );
@@ -261,17 +285,16 @@ function SeatPage() {
   const film = films.find((item) => item.id === query.get('film')) || films[0];
   const date = query.get('date') || defaultBooking.requestedDate;
   const time = query.get('time') || defaultBooking.requestedTime;
-  const [selected, setSelected] = useState([{ row: 1, seat: 1 }]);
-  const seats = useMemo(() => Array.from({ length: 5 }, (_, rowIndex) => Array.from({ length: 8 }, (_, seatIndex) => ({ row: rowIndex + 1, seat: seatIndex + 1 }))), []);
+  const [selected, setSelected] = useState([sofaPlaces[0]]);
   const total = selected.length * film.price;
 
-  function toggleSeat(row, seat) {
-    const exists = selected.some((item) => item.row === row && item.seat === seat);
+  function toggleSeat(place) {
+    const exists = selected.some((item) => item.id === place.id);
     if (exists) {
-      if (selected.length > 1) setSelected(selected.filter((item) => item.row !== row || item.seat !== seat));
+      if (selected.length > 1) setSelected(selected.filter((item) => item.id !== place.id));
       return;
     }
-    if (selected.length < 4) setSelected([...selected, { row, seat }]);
+    setSelected([...selected, place]);
   }
 
   function continueBooking() {
@@ -283,10 +306,22 @@ function SeatPage() {
     <CinemaLayout>
       <section className="seat-page section">
         <Link className="back-link" to={`/cinema/film/${film.id}`}><Icon name="back" /> Назад к фильму</Link>
-        <div className="seat-heading"><div><span className="eyebrow">Шаг 1 из 2</span><h1>Выберите места</h1></div><div><strong>{film.title}</strong><span>{formatDate(date)} · {time} · желаемое время</span></div></div>
+        <div className="seat-heading"><div><span className="eyebrow">Шаг 1 из 2</span><h1>Куда садимся?</h1></div><div><strong>{film.title}</strong><span>{formatDate(date)} · {time} · желаемое время</span></div></div>
         <div className="seat-layout">
-          <div className="hall"><div className="screen"><span>Экран</span></div><div className="seat-map">{seats.map((row) => <div className="seat-row" key={row[0].row}><span>{row[0].row}</span>{row.map(({ row: rowNo, seat }) => { const key = `${rowNo}-${seat}`; const isSelected = selected.some((item) => item.row === rowNo && item.seat === seat); const occupied = occupiedSeats.has(key); return <button key={key} className={`seat ${isSelected ? 'seat--selected' : ''} ${occupied ? 'seat--occupied' : ''}`} disabled={occupied} onClick={() => toggleSeat(rowNo, seat)} aria-label={`Ряд ${rowNo}, место ${seat}${occupied ? ', занято' : ''}`}>{seat}</button>; })}<span>{row[0].row}</span></div>)}</div><div className="seat-legend"><span><i />Свободно</span><span><i className="is-selected" />Выбрано</span><span><i className="is-occupied" />Занято</span></div></div>
-          <aside className="order-summary"><span className="eyebrow">Ваш выбор</span><h2>{film.title}</h2><div className="summary-row"><span>Желаемое время</span><strong>{formatDate(date)} · {time}</strong></div><div className="summary-row"><span>Места</span><strong>{selected.map((item) => `${item.row}/${item.seat}`).join(', ')}</strong></div><div className="summary-total"><span>{selected.length} {selected.length === 1 ? 'билет' : selected.length < 5 ? 'билета' : 'билетов'}</span><strong>{formatKisses(total, true)}</strong></div><button className="button button--primary button--wide" onClick={continueBooking}>Продолжить <Icon name="arrow" /></button><small>Оплата поцелуями при встрече. Максимум 4 места.</small></aside>
+          <div className="living-room" aria-label="Гостиная с плазмой и диваном на два места">
+            <div className="room-glow" />
+            <div className="plasma"><div><Logo compact /><small>Ваша плазма на вечер</small></div><i /></div>
+            <p className="view-note">Плазма прямо перед диваном — оба места одинаково удобные.</p>
+            <div className="sofa-selector" role="group" aria-label="Выберите место на диване">
+              {sofaPlaces.map((place, index) => {
+                const isSelected = selected.some((item) => item.id === place.id);
+                return <button type="button" key={place.id} className={`sofa-place ${isSelected ? 'sofa-place--selected' : ''}`} aria-pressed={isSelected} onClick={() => toggleSeat(place)}><span className="sofa-cushion"><i /></span><strong>{place.shortLabel}</strong><small>Место {index + 1}</small></button>;
+              })}
+            </div>
+            <div className="cinema-cat" aria-hidden="true"><i /><b /><span /></div>
+            <div className="room-floor" />
+          </div>
+          <aside className="order-summary"><span className="eyebrow">Ваш выбор</span><h2>{film.title}</h2><div className="summary-row"><span>Желаемое время</span><strong>{formatDate(date)} · {time}</strong></div><div className="summary-row"><span>Диван</span><strong>{placeNames(selected, true)}</strong></div><div className="summary-total"><span>{selected.length} {selected.length === 1 ? 'билет' : 'билета'}</span><strong>{formatKisses(total, true)}</strong></div><button className="button button--primary button--wide" onClick={continueBooking}>Продолжить <Icon name="arrow" /></button><small>Можно выбрать одно место или весь диван. Оплата поцелуями при встрече.</small></aside>
         </div>
       </section>
     </CinemaLayout>
@@ -296,13 +331,13 @@ function SeatPage() {
 function CheckoutPage() {
   const navigate = useNavigate();
   const [guest, setGuest] = useState(defaultBooking.guest);
-  const booking = useMemo(() => { try { return { ...defaultBooking, ...JSON.parse(sessionStorage.getItem('ehi-booking-draft')) }; } catch { return defaultBooking; } }, []);
+  const booking = useMemo(() => { try { return normalizeBooking(JSON.parse(sessionStorage.getItem('ehi-booking-draft')) || {}); } catch { return defaultBooking; } }, []);
   const film = films.find((item) => item.id === booking.filmId) || films[0];
   const total = booking.seats.length * film.price;
 
   function confirmBooking(event) {
     event.preventDefault();
-    const ticket = { ...booking, guest: guest.trim() || defaultBooking.guest, status: 'request', total, createdAt: new Date().toISOString() };
+    const ticket = { ...booking, guest: guest.trim() || defaultBooking.guest, ticketNumber: makeTicketNumber(), status: 'request', total, createdAt: new Date().toISOString() };
     localStorage.setItem('ehi-booking', JSON.stringify(ticket));
     navigate('/cinema/ticket');
   }
@@ -312,8 +347,8 @@ function CheckoutPage() {
       <section className="checkout-page section">
         <Link className="back-link" to={`/cinema/seats?film=${film.id}&date=${booking.requestedDate}&time=${booking.requestedTime}`}><Icon name="back" /> Назад к местам</Link>
         <div className="checkout-grid">
-          <form className="checkout-form" onSubmit={confirmBooking}><span className="eyebrow">Шаг 2 из 2</span><h1>Подтвердим запрос</h1><p>Имя появится на билетах. Денег и данных карты не потребуется.</p><label>Имя гостя<input value={guest} onChange={(event) => setGuest(event.target.value)} required autoComplete="name" /></label><label className="check-label"><input type="checkbox" required defaultChecked /><span><Icon name="check" /></span>Я понимаю, что дата подтвердится после согласования</label><button className="button button--primary button--wide" type="submit">Забронировать за {formatKisses(total, true)} <Icon name="heart" /></button><small>Настоящего списания нет. Оплата поцелуями при встрече.</small></form>
-          <aside className="checkout-summary"><Poster film={film} /><div><span className="eyebrow">Ваш запрос</span><h2>{film.title}</h2><p><Icon name="clock" />{formatDate(booking.requestedDate)} · {booking.requestedTime}</p><p><Icon name="pin" />Зал 3 · {booking.seats.map((seat) => `ряд ${seat.row}, место ${seat.seat}`).join('; ')}</p><div className="checkout-total"><span>Стоимость билетов</span><strong>{formatKisses(total, true)}</strong></div></div></aside>
+          <form className="checkout-form" onSubmit={confirmBooking}><span className="eyebrow">Шаг 2 из 2</span><h1>Оформим билет</h1><p>Введите имя и фамилию так, как они должны выглядеть на билете. Фильм, дата, время и место подставятся автоматически.</p><label>Имя и фамилия гостя<input value={guest} onChange={(event) => setGuest(event.target.value)} required autoComplete="name" maxLength="42" /></label><div className="autofill-note"><Icon name="ticket" /><span><strong>Остальное уже заполнено</strong>Номер билета создадим автоматически после подтверждения.</span></div><label className="check-label"><input type="checkbox" required defaultChecked /><span><Icon name="check" /></span>Я понимаю, что дата подтвердится после согласования</label><button className="button button--primary button--wide" type="submit">Получить билет за {formatKisses(total, true)} <Icon name="heart" /></button><small>Настоящего списания нет. Оплата поцелуями при встрече.</small></form>
+          <aside className="checkout-summary"><Poster film={film} /><div><span className="eyebrow">Данные билета</span><h2>{film.title}</h2><p><Icon name="clock" />{formatDate(booking.requestedDate)} · {booking.requestedTime}</p><p><Icon name="pin" />Гостиная · плазма · диван: {placeNames(booking.seats, true)}</p><div className="checkout-total"><span>Стоимость билетов</span><strong>{formatKisses(total, true)}</strong></div></div></aside>
         </div>
       </section>
     </CinemaLayout>
@@ -324,20 +359,30 @@ function Barcode() {
   return <div className="barcode" aria-label="Штрихкод билета">{Array.from({ length: 26 }, (_, index) => <i key={index} style={{ width: index % 4 === 0 ? 4 : index % 3 === 0 ? 2 : 1 }} />)}</div>;
 }
 
+function TicketQr() {
+  return <div className="ticket-qr" aria-hidden="true">{Array.from({ length: 81 }, (_, index) => <i key={index} className={(index * 7 + Math.floor(index / 9) * 3) % 5 < 2 ? 'is-dark' : ''} />)}</div>;
+}
+
 function Ticket({ booking }) {
   const film = films.find((item) => item.id === booking.filmId) || films[0];
   const total = booking.total || booking.seats.length * film.price;
   return (
     <article className="paper-ticket">
-      <div className="ticket-brand"><Logo /><span>ПЕРСОНАЛЬНЫЙ ПОКАЗ</span></div>
-      <div className="ticket-main"><div className="ticket-top"><span>EHI! CINEMA</span><span>ЗАПРОС НА БРОНИРОВАНИЕ</span></div><small>Гость</small><h2>{booking.guest}</h2><div className="ticket-film"><span>Произведение</span><strong>{film.title}</strong><b>{film.age}</b></div><div className="ticket-data"><span><small>Желаемая дата</small><strong>{formatDate(booking.requestedDate)}</strong></span><span><small>Время</small><strong>{booking.requestedTime}</strong></span><span><small>Зал</small><strong>{booking.hall}</strong></span></div><div className="ticket-seats"><span>Места <strong>{booking.seats.map((seat) => `${seat.row}/${seat.seat}`).join(', ')}</strong></span><span>Стоимость <strong>{formatKisses(total, true)}</strong></span></div></div>
-      <div className="ticket-stub"><Logo compact /><strong>№ {booking.ticketNumber}</strong><span>{formatKisses(total, true)}</span><Barcode /></div>
+      <div className="ticket-brand" aria-hidden="true"><span>E</span><span>H</span><span>I</span><b>!</b></div>
+      <div className="ticket-main">
+        <div className="ticket-top"><span>▣ &nbsp; Кинотеатр: <strong>EHI! CINEMA</strong></span><span>● &nbsp; ул. Кинематографическая, 12</span></div>
+        <small>Гость:</small><h2>{booking.guest}</h2>
+        <div className="ticket-film"><span>Фильм:</span><strong>{film.title}</strong><b>{film.age}</b></div>
+        <div className="ticket-data"><span><small>Дата:</small><strong>{formatDate(booking.requestedDate)}</strong></span><span><small>Время:</small><strong>{booking.requestedTime}</strong></span><span><small>Зал:</small><strong>{booking.room || 'Гостиная'}</strong></span></div>
+        <div className="ticket-seats"><span><small>Ряд:</small><strong>Диван</strong></span><span><small>Место:</small><strong>{placeNames(booking.seats, true)}</strong></span><span><small>Билет:</small><strong>№ {booking.ticketNumber}</strong></span></div>
+      </div>
+      <div className="ticket-stub"><Logo compact /><div className="ticket-spark">✦</div><TicketQr /><strong>№ {booking.ticketNumber}</strong><span>{formatKisses(total, true)}</span><Barcode /></div>
     </article>
   );
 }
 
 function readBooking() {
-  try { return { ...defaultBooking, ...JSON.parse(localStorage.getItem('ehi-booking')) }; } catch { return defaultBooking; }
+  try { return normalizeBooking(JSON.parse(localStorage.getItem('ehi-booking')) || {}); } catch { return defaultBooking; }
 }
 
 function TicketPage() {
@@ -356,7 +401,7 @@ function TicketsPage() {
 
 function AboutPage() {
   return (
-    <CinemaLayout><section className="about-hero section"><span className="eyebrow">О кинотеатре</span><h1>Небольшой зал.<br />Большие чувства.</h1><p>EHI! CINEMA — вымышленный персональный кинотеатр для настоящих совместных вечеров. Здесь не бывает случайных гостей и обычных денег.</p></section><section className="about-values section"><div><strong>01</strong><h3>Кино по договорённости</h3><p>Сначала выбираем историю и желаемое время, затем подтверждаем показ лично.</p></div><div><strong>02</strong><h3>Оплата поцелуями</h3><p>Одно место стоит {formatKisses(5)}. Никаких карт, комиссий или настоящего списания.</p></div><div><strong>03</strong><h3>Только свои</h3><p>Один камерный зал, тёплый свет и люди, которых хочется видеть рядом.</p></div></section></CinemaLayout>
+    <CinemaLayout><section className="about-hero section"><span className="eyebrow">О кинотеатре</span><h1>Небольшая гостиная.<br />Большие чувства.</h1><p>EHI! CINEMA — вымышленный персональный кинотеатр для настоящих совместных вечеров. Здесь есть плазма, диван на двоих и никаких случайных гостей.</p></section><section className="about-values section"><div><strong>01</strong><h3>Кино по договорённости</h3><p>Сначала выбираем историю и желаемое время, затем подтверждаем показ лично.</p></div><div><strong>02</strong><h3>Оплата поцелуями</h3><p>Одно место стоит {formatKisses(5)}. Никаких карт, комиссий или настоящего списания.</p></div><div><strong>03</strong><h3>Только свои</h3><p>Одна уютная гостиная, обычная плазма, мягкий диван и люди, которых хочется видеть рядом.</p></div></section></CinemaLayout>
   );
 }
 
